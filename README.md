@@ -24,7 +24,7 @@ Endpoints: `GET /status`, `POST /start`, `POST /stop`, `POST /restart`.
     systemctl --user restart plasma-plasmashell.service
 
 Then right-click the desktop/panel > Add Widgets > "XMRig Control".
-Test without adding it: `plasmawindowed org.kde.xmrigcontrol`
+Test without adding it: `plasmawindowed com.github.theonlybibi.xmrigcontrol`
 
 ## Security notes
 
