@@ -25,13 +25,10 @@ PlasmoidItem {
 
     readonly property real gu: Kirigami.Units.gridUnit
 
-    // Monero palette
-    readonly property color cBg:     "#1A1A1A"
-    readonly property color cCard:   "#262626"
-    readonly property color cText:   "#FFFFFF"
-    readonly property color cMuted:  "#9A9A9A"
+    // Fixed accent / status colors (Monero orange + semantic states, readable on light and dark).
+    // Neutral colors (background, text, cards...) come from the system theme: see `panel` below.
+    readonly property color cMuted:  "#9A9A9A"   // only used for the "offline/unknown" status
     readonly property color cOrange: "#FF6600"
-    readonly property color cGray:   "#4C4C4C"
     readonly property color cGreen:  "#2ECC71"
     readonly property color cRed:    "#E5484D"
     readonly property color cYellow: "#E9A23B"
@@ -185,7 +182,16 @@ PlasmoidItem {
 
     fullRepresentation: Rectangle {
         id: panel
-        color: root.cBg
+        // No own background: the Plasma popup/desktop frame (system theme) is shown.
+        color: "transparent"
+
+        // Neutral palette derived from the current system theme (light/dark/custom)
+        readonly property color cText:      Kirigami.Theme.textColor
+        readonly property color cMutedText: Qt.alpha(Kirigami.Theme.textColor, 0.6)
+        readonly property color cCard:      Qt.alpha(Kirigami.Theme.textColor, 0.08)
+        readonly property color cTrack:     Qt.alpha(Kirigami.Theme.textColor, 0.16)
+        readonly property color cStop:      Qt.alpha(Kirigami.Theme.textColor, 0.20)
+        readonly property color cStopHover: Qt.alpha(Kirigami.Theme.textColor, 0.30)
 
         readonly property string pos: Plasmoid.configuration.layoutPosition
         readonly property bool horizontal: pos === "left" || pos === "right"
@@ -214,7 +220,7 @@ PlasmoidItem {
             visible: value !== ""
             Text {
                 text: parent.label
-                color: root.cMuted
+                color: panel.cMutedText
                 font.pixelSize: Math.round(12 * panel.k)
             }
             Text {
@@ -222,7 +228,7 @@ PlasmoidItem {
                 Layout.minimumWidth: 0
                 horizontalAlignment: Text.AlignRight
                 text: parent.value
-                color: root.cText
+                color: panel.cText
                 font.pixelSize: Math.round(12 * panel.k)
                 elide: Text.ElideRight
             }
@@ -278,7 +284,7 @@ PlasmoidItem {
                         y: 0
                         source: "view-refresh"
                         isMask: true
-                        color: refreshArea.containsMouse ? root.cText : root.cMuted
+                        color: refreshArea.containsMouse ? panel.cText : panel.cMutedText
                         width: Math.round(Kirigami.Units.iconSizes.smallMedium * panel.k)
                         height: width
                         MouseArea {
@@ -308,7 +314,7 @@ PlasmoidItem {
                     wrapMode: Text.WordWrap
                     visible: root.errorMsg !== ""
                     text: root.errorMsg
-                    color: root.cMuted
+                    color: panel.cMutedText
                     font.pixelSize: Math.round(13 * panel.k)
                 }
             }
@@ -335,7 +341,7 @@ PlasmoidItem {
                         spacing: root.gu * 0.5
                         Text {
                             text: "Threads"
-                            color: root.cMuted
+                            color: panel.cMutedText
                             font.pixelSize: Math.round(12 * panel.k)
                         }
                         Text {
@@ -344,7 +350,7 @@ PlasmoidItem {
                             horizontalAlignment: Text.AlignRight
                             elide: Text.ElideRight
                             font.pixelSize: Math.round(12 * panel.k)
-                            color: root.threadsMsg !== "" ? root.cRed : root.cText
+                            color: root.threadsMsg !== "" ? root.cRed : panel.cText
                             text: root.threadsMsg !== "" ? root.threadsMsg
                                   : root.cfgError !== "" ? root.cfgError
                                   : (root.shownThreads > 0 ? root.shownThreads : "—") + " / " + root.maxThreads
@@ -370,7 +376,7 @@ PlasmoidItem {
                                     width: Math.max(1, (threadBar.width - threadBar.gap * (root.maxThreads - 1)) / root.maxThreads)
                                     height: threadBar.height
                                     radius: Math.min(3, width / 2)
-                                    color: index < root.shownThreads ? root.cOrange : "#333333"
+                                    color: index < root.shownThreads ? root.cOrange : panel.cTrack
                                 }
                             }
                         }
@@ -395,7 +401,7 @@ PlasmoidItem {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    color: root.cCard
+                    color: panel.cCard
                     radius: 8
                     visible: panel.showInfo
                     implicitHeight: infoCol.implicitHeight + root.gu * 1.2 * panel.k
@@ -421,14 +427,14 @@ PlasmoidItem {
                     readonly property bool usable: !root.busy && root.svcState !== "offline" && root.svcState !== "unknown"
 
                     color: root.isRunning
-                           ? (btnArea.containsMouse ? "#5A5A5A" : root.cGray)
+                           ? (btnArea.containsMouse ? panel.cStopHover : panel.cStop)
                            : (btnArea.containsMouse ? "#FF7A26" : root.cOrange)
                     opacity: usable ? 1.0 : 0.45
 
                     Text {
                         anchors.centerIn: parent
                         text: root.busy ? "Please wait…" : (root.isRunning ? "Stop" : "Start")
-                        color: root.cText
+                        color: root.isRunning ? panel.cText : "#FFFFFF"   // white on the orange Start button
                         font.pixelSize: Math.round(15 * panel.k)
                         font.bold: true
                     }

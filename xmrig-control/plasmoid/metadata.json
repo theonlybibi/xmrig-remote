@@ -8,7 +8,7 @@
         "Category": "System Information",
         "Authors": [{ "Name": "theonlybibi" }],
         "License": "GPL-3.0",
-        "Version": "1.1.0"
+        "Version": "1.1.1"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }
