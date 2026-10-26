@@ -1,14 +1,14 @@
 {
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
-        "Id": "org.kde.xmrigcontrol",
+        "Id": "com.github.theonlybibi.xmrigcontrol",
         "Name": "XMRig Control",
         "Description": "Remote status and control for the xmrig service",
         "Icon": "/icons/icon.svg",
         "Category": "System Information",
-        "Authors": [{ "Name": "me" }],
+        "Authors": [{ "Name": "theonlybibi" }],
         "License": "GPL-3.0",
-        "Version": "1.0.1"
+        "Version": "1.1.0"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }

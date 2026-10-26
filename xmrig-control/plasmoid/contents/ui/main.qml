@@ -13,6 +13,16 @@ PlasmoidItem {
     property string errorMsg: ""
     property bool busy: false
 
+    // Thread control
+    property int svcThreads: 0          // current thread count reported by the server (0 = unknown/auto)
+    property int maxThreads: 0          // 0 = server does not report it -> bar hidden
+    property string cfgError: ""
+    property string threadsMsg: ""
+    property int pendingThreads: 0      // value sent, waiting for the server answer
+    property bool dragging: false
+    property int dragValue: 0
+    readonly property int shownThreads: dragging ? dragValue : (pendingThreads > 0 ? pendingThreads : svcThreads)
+
     readonly property real gu: Kirigami.Units.gridUnit
 
     // Monero palette
@@ -45,9 +55,20 @@ PlasmoidItem {
     toolTipMainText: "XMRig"
     toolTipSubText: errorMsg !== "" ? errorMsg : stateLabel
 
-    function call(method, path, cb) {
+    function errorText(code) {
+        var m = {
+            "config_not_found": "config.json not found", "not_found": "config.json not found",
+            "permission_denied": "No access to config.json", "invalid_json": "Invalid config.json",
+            "unsupported_config": "Unsupported config.json", "invalid_file": "Invalid config.json",
+            "write_failed": "Config write failed", "backup_failed": "Config backup failed",
+            "edit_failed": "Config edit failed", "unreadable": "Cannot read config.json"
+        }
+        return m[code] || code
+    }
+
+    function call(method, path, cb, body) {
         var xhr = new XMLHttpRequest()
-        xhr.timeout = 8000
+        xhr.timeout = body !== undefined ? 25000 : 8000   // changing threads restarts the service
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return
             if (xhr.status === 200) {
@@ -58,13 +79,20 @@ PlasmoidItem {
             } else if (xhr.status === 401) {
                 cb("Invalid token", null)
             } else {
-                cb("HTTP " + xhr.status, null)
+                var msg = "HTTP " + xhr.status
+                try { var e = JSON.parse(xhr.responseText); if (e.error) msg = root.errorText(e.error) } catch (x) {}
+                cb(msg, null)
             }
         }
         var base = Plasmoid.configuration.serverUrl.replace(/\/+$/, "")
         xhr.open(method, base + path)
         xhr.setRequestHeader("Authorization", "Bearer " + Plasmoid.configuration.token)
-        xhr.send()
+        if (body !== undefined) {
+            xhr.setRequestHeader("Content-Type", "application/json")
+            xhr.send(JSON.stringify(body))
+        } else {
+            xhr.send()
+        }
     }
 
     function apply(err, data) {
@@ -75,6 +103,7 @@ PlasmoidItem {
             svcSub = ""
             svcPid = 0
             svcSince = ""
+            svcThreads = 0          // keep maxThreads so the bar does not jump
             return
         }
         errorMsg = ""
@@ -82,6 +111,29 @@ PlasmoidItem {
         svcSub = data.substate
         svcPid = data.pid
         svcSince = data.since
+        svcThreads = (typeof data.threads === "number") ? data.threads : 0
+        maxThreads = (typeof data.max_threads === "number") ? data.max_threads : 0
+        cfgError = data.config_error ? errorText(data.config_error) : ""
+    }
+
+    function setThreads(n) {
+        threadsMsg = ""
+        pendingThreads = n
+        busy = true
+        call("POST", "/threads", applyThreads, { "threads": n })
+    }
+
+    function applyThreads(err, data) {
+        pendingThreads = 0
+        if (err === "Server unreachable" || err === "Invalid token") {
+            apply(err, null)
+        } else if (err) {
+            busy = false
+            threadsMsg = err
+            msgTimer.restart()
+        } else {
+            apply(null, data)
+        }
     }
 
     function formatSince(t) {
@@ -91,6 +143,12 @@ PlasmoidItem {
 
     function refresh() { call("GET", "/status", apply) }
     function act(name) { busy = true; call("POST", "/" + name, apply) }
+
+    Timer {
+        id: msgTimer
+        interval: 6000
+        onTriggered: root.threadsMsg = ""
+    }
 
     Timer {
         interval: Math.max(2, Plasmoid.configuration.interval) * 1000
@@ -135,15 +193,17 @@ PlasmoidItem {
 
         // Small minimum, no maximum: freely resizable
         Layout.preferredWidth: root.gu * (horizontal ? 24 : 16)
-        Layout.preferredHeight: root.gu * (horizontal ? 14 : 21)
+        Layout.preferredHeight: root.gu * (horizontal ? 15 : 24)
         Layout.minimumWidth: root.gu * (horizontal ? 14 : 9)
         Layout.minimumHeight: root.gu * (horizontal ? 8 : 11)
 
         // Content scale follows the available size
         readonly property real k: Math.max(0.7, Math.min(3.0, Math.min(
             width  / (root.gu * (horizontal ? 24 : 16)),
-            height / (root.gu * (horizontal ? 14 : 21)))))
-        readonly property bool showInfo: height >= root.gu * (horizontal ? 11 : 15)
+            height / (root.gu * (horizontal ? 15 : 24)))))
+        readonly property bool showThreads: root.maxThreads > 0
+            && height >= root.gu * (horizontal ? 9 : 13)
+        readonly property bool showInfo: height >= root.gu * (horizontal ? 12 : 17)
             && (root.svcSub !== "" || root.svcPid > 0)
 
         component InfoRow: RowLayout {
@@ -214,8 +274,8 @@ PlasmoidItem {
 
                     // Refresh icon, top-right of the logo area
                     Kirigami.Icon {
-                        anchors.top: parent.top
-                        anchors.right: parent.right
+                        x: panel.pos === "right" ? 0 : logoArea.width - width
+                        y: 0
                         source: "view-refresh"
                         isMask: true
                         color: refreshArea.containsMouse ? root.cText : root.cMuted
@@ -263,6 +323,75 @@ PlasmoidItem {
                 Layout.row: panel.horizontal ? 0 : (panel.reversed ? 0 : 1)
                 Layout.column: panel.horizontal ? (panel.reversed ? 0 : 1) : 0
                 spacing: root.gu * 0.6 * panel.k
+
+                // Thread control: one notch per logical CPU, orange = threads in use
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: panel.showThreads
+                    spacing: root.gu * 0.3 * panel.k
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: root.gu * 0.5
+                        Text {
+                            text: "Threads"
+                            color: root.cMuted
+                            font.pixelSize: Math.round(12 * panel.k)
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            horizontalAlignment: Text.AlignRight
+                            elide: Text.ElideRight
+                            font.pixelSize: Math.round(12 * panel.k)
+                            color: root.threadsMsg !== "" ? root.cRed : root.cText
+                            text: root.threadsMsg !== "" ? root.threadsMsg
+                                  : root.cfgError !== "" ? root.cfgError
+                                  : (root.shownThreads > 0 ? root.shownThreads : "—") + " / " + root.maxThreads
+                        }
+                    }
+
+                    Item {
+                        id: threadBar
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.max(10, root.gu * 1.1 * panel.k)
+
+                        readonly property bool usable: !root.busy && root.cfgError === ""
+                            && root.svcState !== "offline" && root.svcState !== "unknown"
+                        readonly property real gap: (width / Math.max(1, root.maxThreads)) > 7 ? 2 : 0
+                        opacity: usable ? 1.0 : 0.45
+
+                        Row {
+                            anchors.fill: parent
+                            spacing: threadBar.gap
+                            Repeater {
+                                model: root.maxThreads
+                                Rectangle {
+                                    width: Math.max(1, (threadBar.width - threadBar.gap * (root.maxThreads - 1)) / root.maxThreads)
+                                    height: threadBar.height
+                                    radius: Math.min(3, width / 2)
+                                    color: index < root.shownThreads ? root.cOrange : "#333333"
+                                }
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: threadBar.usable
+                            cursorShape: Qt.PointingHandCursor
+                            function valueAt(x) {
+                                return Math.max(1, Math.min(root.maxThreads,
+                                                Math.floor(x / width * root.maxThreads) + 1))
+                            }
+                            onPressed: (m) => { root.dragging = true; root.dragValue = valueAt(m.x) }
+                            onPositionChanged: (m) => { if (pressed) root.dragValue = valueAt(m.x) }
+                            onReleased: {
+                                root.dragging = false
+                                if (root.dragValue !== root.svcThreads) root.setThreads(root.dragValue)
+                            }
+                            onCanceled: root.dragging = false
+                        }
+                    }
+                }
 
                 Rectangle {
                     Layout.fillWidth: true

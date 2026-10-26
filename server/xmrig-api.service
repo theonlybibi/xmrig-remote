@@ -11,10 +11,17 @@ ExecStart=/usr/bin/python3 /opt/xmrig-api/xmrig_api.py
 Restart=on-failure
 RestartSec=3
 
+# Private state (config.json backup); owned by xmrig-api, mode 0700
+StateDirectory=xmrig-api
+StateDirectoryMode=0700
+# The ONLY place outside the state dir the sandbox lets this service write to.
+# File permissions (an ACL on config.json alone) still decide what it may modify.
+ReadWritePaths=-@CONFIG_DIR@
+
 # Hardening
 NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=yes
+ProtectHome=@PROTECT_HOME@
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectKernelTunables=yes
