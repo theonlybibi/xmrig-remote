@@ -25,7 +25,8 @@ HOST = os.environ.get("API_HOST", "127.0.0.1")      # safe default: local only
 PORT = int(os.environ.get("API_PORT", "8080"))
 TOKEN = os.environ.get("API_TOKEN", "")
 CONFIG_OVERRIDE = os.environ.get("XMRIG_CONFIG", "")            # explicit config.json path
-STATE_DIR = os.environ.get("STATE_DIRECTORY", "").split(":")[0]  # set by systemd (StateDirectory=)
+STATE_DIR = (os.environ.get("STATE_DIRECTORY") or os.environ.get("XMRIG_API_STATE", "")).split(":")[0]
+USER_SCOPE = os.environ.get("XMRIG_SCOPE", "system") == "user"   # "user" => talk to `systemctl --user`
 ACTIONS = {"start", "stop", "restart"}
 
 MAX_FAILS = 10          # failed auth attempts before an IP is blocked
@@ -72,7 +73,8 @@ def clear_failures(ip):
 
 # --------------------------------------------------------------------- systemd
 def systemctl(*args):
-    return subprocess.run(["systemctl", *args], capture_output=True, text=True, timeout=20)
+    cmd = ["systemctl", "--user", *args] if USER_SCOPE else ["systemctl", *args]
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=20)
 
 
 def show(props):

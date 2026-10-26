@@ -1,0 +1,23 @@
+[Unit]
+Description=Xmrig remote control API (user service)
+# keep retrying (e.g. VPN interface not up yet right after login)
+StartLimitIntervalSec=0
+
+[Service]
+EnvironmentFile=@ENV_FILE@
+ExecStart=@PYTHON@ @SCRIPT@
+Restart=on-failure
+RestartSec=3
+
+# Hardening that works without privileges (seccomp based)
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=default.target
